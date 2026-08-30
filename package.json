@@ -8,6 +8,7 @@
   "packageManager": "pnpm@11.23.0",
   "scripts": {
     "postinstall": "pnpm --filter @instagram-agent/db run generate",
+    "start": "pnpm --filter worker start",
     "dev:web": "pnpm --filter web dev",
     "dev:worker": "pnpm --filter worker dev",
     "build": "pnpm -r build",
