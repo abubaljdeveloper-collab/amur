@@ -1,0 +1,458 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum AutonomyLevel {
+  LEVEL_0_MANUAL // AI suggests only
+  LEVEL_1_ASSISTED // AI drafts, owner approves everything
+  LEVEL_2_APPROVAL_REQUIRED // approval required for every action (safe MVP default)
+  LEVEL_3_AUTO_LOW_RISK // low/medium risk actions auto-execute within rules
+  LEVEL_4_FULL_AUTO // fully autonomous, still bound by policy/safety checks
+}
+
+enum AccountStatus {
+  CONNECTED
+  TOKEN_EXPIRED
+  DISCONNECTED
+  ERROR
+}
+
+enum ContentType {
+  IMAGE
+  VIDEO
+  REEL
+  CAROUSEL
+  STORY
+}
+
+enum ContentStatus {
+  IDEA
+  DRAFT
+  REVIEW
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  ARCHIVED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum CommentClassification {
+  QUESTION
+  PRAISE
+  COMPLAINT
+  BUSINESS_INQUIRY
+  SPAM
+  ABUSIVE
+  SENSITIVE
+}
+
+enum CommentDecision {
+  AUTO_REPLY
+  SUGGEST_REPLY
+  IGNORE
+  ESCALATE
+}
+
+enum CommentStatus {
+  NEW
+  PROCESSED
+  REPLIED
+  IGNORED
+  ESCALATED
+}
+
+enum ConversationClassification {
+  GENERAL
+  CUSTOMER
+  SALES
+  SUPPORT
+  COMPLAINT
+  COLLABORATION
+  SPAM
+  IMPORTANT
+}
+
+enum ConversationStatus {
+  OPEN
+  ESCALATED
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageSenderType {
+  CUSTOMER
+  AI_AGENT
+  HUMAN_OWNER
+}
+
+enum ActionType {
+  GENERATE_CONTENT
+  PUBLISH_CONTENT
+  REPLY_COMMENT
+  HIDE_COMMENT
+  DELETE_COMMENT
+  SEND_DM
+  ESCALATE
+}
+
+enum AgentType {
+  CONTENT_AGENT
+  PUBLISHING_AGENT
+  COMMENT_AGENT
+  DM_AGENT
+  ANALYTICS_AGENT
+  COMMAND_CENTER
+}
+
+enum ActionStatus {
+  PROPOSED
+  BLOCKED
+  PENDING_APPROVAL
+  APPROVED
+  EXECUTED
+  REJECTED
+  FAILED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum NotificationType {
+  APPROVAL_NEEDED
+  ESCALATION
+  PUBLISH_SUCCESS
+  PUBLISH_FAILED
+  TOKEN_EXPIRING
+  SYSTEM_ALERT
+}
+
+enum ActorType {
+  AI_AGENT
+  HUMAN
+  SYSTEM
+}
+
+// ─── Models ─────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  instagramAccounts InstagramAccount[]
+  notifications     Notification[]
+  decidedApprovals  Approval[]
+
+  @@map("users")
+}
+
+model InstagramAccount {
+  id                   String        @id @default(cuid())
+  userId               String
+  instagramUserId      String        @unique
+  username             String
+  profilePictureUrl    String?
+  accountType          String        @default("BUSINESS")
+  accessTokenEncrypted String
+  tokenExpiresAt       DateTime?
+  status               AccountStatus @default(CONNECTED)
+  connectedAt          DateTime      @default(now())
+  lastSyncedAt         DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentSettings  AgentSettings?
+  knowledgeBase  KnowledgeBase[]
+  content        Content[]
+  comments       Comment[]
+  conversations  Conversation[]
+  actions        Action[]
+  analytics      Analytics[]
+
+  @@index([userId])
+  @@map("instagram_accounts")
+}
+
+model AgentSettings {
+  id                 String        @id @default(cuid())
+  instagramAccountId String        @unique
+  autonomyLevel      AutonomyLevel @default(LEVEL_2_APPROVAL_REQUIRED)
+
+  contentEnabled    Boolean @default(true)
+  publishingEnabled Boolean @default(true)
+  commentsEnabled   Boolean @default(true)
+  dmsEnabled        Boolean @default(true)
+  analyticsEnabled  Boolean @default(true)
+
+  agentName        String  @default("AI Agent")
+  personalityPrompt String @default("")
+  brandVoice        String @default("")
+  language          String @default("ar")
+  dialect           String?
+  forbiddenWords    String[] @default([])
+  preferredWords    String[] @default([])
+  emojiPolicy       String  @default("moderate")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@map("agent_settings")
+}
+
+model KnowledgeBase {
+  id                 String   @id @default(cuid())
+  instagramAccountId String
+  title              String
+  content            String
+  category           String   @default("general")
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@index([instagramAccountId, isActive])
+  @@map("knowledge_base")
+}
+
+model Content {
+  id                 String        @id @default(cuid())
+  instagramAccountId String
+  type               ContentType
+  status             ContentStatus @default(IDEA)
+  topic              String?
+  caption            String?
+  hashtags           String[]      @default([])
+  hooks              String[]      @default([])
+  cta                String?
+  generatedByAi      Boolean       @default(true)
+  createdById        String?
+  reviewedById       String?
+  publishedMediaId   String? // Instagram media id returned after publish
+  failureReason      String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  media            Media[]
+  calendar         ContentCalendar?
+  comments         Comment[]
+
+  @@index([instagramAccountId, status])
+  @@map("content")
+}
+
+model Media {
+  id         String    @id @default(cuid())
+  contentId  String
+  storageKey String
+  type       MediaType
+  order      Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([contentId])
+  @@map("media")
+}
+
+model ContentCalendar {
+  id             String    @id @default(cuid())
+  contentId      String    @unique
+  scheduledAt    DateTime
+  publishedAt    DateTime?
+  timezone       String    @default("UTC")
+  recurrenceRule String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledAt])
+  @@map("content_calendar")
+}
+
+model Comment {
+  id                  String                 @id @default(cuid())
+  instagramAccountId  String
+  contentId           String?
+  instagramCommentId  String                 @unique
+  instagramMediaId    String
+  authorUsername      String
+  text                String
+  classification      CommentClassification?
+  decision            CommentDecision?
+  suggestedReply      String?
+  confidence          Float?
+  reasoning           String?
+  status              CommentStatus          @default(NEW)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  content          Content?         @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  @@index([instagramAccountId, status])
+  @@map("comments")
+}
+
+model Conversation {
+  id                       String                       @id @default(cuid())
+  instagramAccountId       String
+  instagramConversationId  String                       @unique
+  participantUsername      String
+  participantId             String
+  classification            ConversationClassification?
+  status                    ConversationStatus           @default(OPEN)
+  lastMessageAt              DateTime                     @default(now())
+  createdAt                  DateTime                      @default(now())
+  updatedAt                  DateTime                      @updatedAt
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  messages         Message[]
+
+  @@index([instagramAccountId, status])
+  @@map("conversations")
+}
+
+model Message {
+  id                 String            @id @default(cuid())
+  conversationId     String
+  instagramMessageId String?
+  direction          MessageDirection
+  senderType         MessageSenderType
+  text               String
+  aiConfidence       Float?
+  createdAt          DateTime          @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model Action {
+  id                    String       @id @default(cuid())
+  instagramAccountId    String
+  actionType            ActionType
+  proposedBy            AgentType
+  payload               Json
+  status                ActionStatus @default(PROPOSED)
+  reasoning             String?
+  relatedContentId      String?
+  relatedCommentId      String?
+  relatedConversationId String?
+  executedAt            DateTime?
+  errorMessage          String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  approval         Approval?
+
+  @@index([instagramAccountId, status])
+  @@map("actions")
+}
+
+model Analytics {
+  id                 String   @id @default(cuid())
+  instagramAccountId String
+  metricDate         DateTime
+  followersCount     Int      @default(0)
+  reach              Int      @default(0)
+  impressions        Int      @default(0)
+  engagementRate     Float    @default(0)
+  profileViews       Int      @default(0)
+  newFollowers       Int      @default(0)
+  raw                Json?
+  createdAt          DateTime @default(now())
+
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([instagramAccountId, metricDate])
+  @@map("analytics")
+}
+
+model Approval {
+  id             String         @id @default(cuid())
+  actionId       String         @unique
+  requestedAt    DateTime       @default(now())
+  status         ApprovalStatus @default(PENDING)
+  decidedById    String?
+  decidedAt      DateTime?
+  editedPayload  Json?
+  notes          String?
+  expiresAt      DateTime?
+
+  action     Action @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  decidedBy  User?  @relation(fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("approvals")
+}
+
+model Notification {
+  id                    String           @id @default(cuid())
+  userId                String
+  type                  NotificationType
+  title                 String
+  body                  String
+  relatedActionId       String?
+  relatedConversationId String?
+  isRead                Boolean          @default(false)
+  createdAt             DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+/// Append-only. Foreign "references" are stored as plain string ids (no FK constraint)
+/// so the audit trail survives deletion of the entity it describes.
+model AuditLog {
+  id                 String    @id @default(cuid())
+  actorType          ActorType
+  actorId            String?
+  instagramAccountId String?
+  entityType         String
+  entityId           String
+  eventType          String
+  beforeState        Json?
+  afterState         Json?
+  metadata           Json?
+  createdAt          DateTime  @default(now())
+
+  @@index([instagramAccountId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+.env
+.env.local
+.data/
+*.log
+.DS_Store
+.pnpm-store/
+.claude/settings.local.json

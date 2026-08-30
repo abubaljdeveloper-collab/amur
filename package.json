@@ -1,0 +1,24 @@
+{
+  "name": "instagram-ai-agent",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.23.0",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter db generate",
+    "db:migrate": "pnpm --filter db migrate",
+    "db:studio": "pnpm --filter db studio",
+    "db:seed": "pnpm --filter db seed"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5.6.3"
+  }
+}
