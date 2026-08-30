@@ -7,10 +7,16 @@ import { processPublishSchedule } from "./processors/publish-content.processor";
 import { processAnalyticsSync } from "./processors/analytics-sync.processor";
 import { processTokenRefresh } from "./processors/token-refresh.processor";
 
-// Loads .env from cwd (apps/worker/.env, symlinked to the repo-root .env) — must run
-// before any getEnv()/getRedisConnection() call below. Safe here since none of the
-// imported workspace packages read env vars at their own module-load time.
-process.loadEnvFile();
+// Loads .env from cwd (apps/worker/.env, symlinked to the repo-root .env) when present —
+// local dev only. Hosting platforms (Railway, etc.) inject env vars directly with no .env
+// file on disk, so a missing file here is expected, not an error. Must run before any
+// getEnv()/getRedisConnection() call below; safe since no imported workspace package reads
+// env vars at its own module-load time.
+try {
+  process.loadEnvFile();
+} catch (err) {
+  if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+}
 
 const connection = getRedisConnection();
 

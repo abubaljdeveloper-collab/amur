@@ -1,9 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 import { randomBytes, createCipheriv } from "node:crypto";
 
-// Loads .env from cwd (packages/db/.env, symlinked to the repo-root .env) — must run
-// before `new PrismaClient()` reads DATABASE_URL.
-process.loadEnvFile();
+// Loads .env from cwd (packages/db/.env, symlinked to the repo-root .env) when present —
+// local dev only, hosting/CI platforms inject env vars directly. Must run before
+// `new PrismaClient()` reads DATABASE_URL.
+try {
+  process.loadEnvFile();
+} catch (err) {
+  if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+}
 
 const prisma = new PrismaClient();
 
